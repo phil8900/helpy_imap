@@ -128,21 +128,30 @@ class ImapProcessor
   end
 
   def handle_attachments(email, post)
-    if email.attachments.present? && cloudinary_enabled?
+    if email.attachments.present?
       array_of_files = []
       email.attachments.each do |attachment|
-        array_of_files << File.open(attachment.tempfile.path, 'r')
+        
+        filename = attachment.filename
+        extension = File.extname(filename)
+        tempfile = Tempfile.new([File.basename(filename, extension) + '-', extension])
+        File.open(tempfile, 'wb') { |f| f.write(attachment.decoded) }
+
+        array_of_files << File.open(tempfile, 'r')
       end
-      post.screenshots = array_of_files
-    elsif email.attachments.present?
-      post.update(
-        attachments: email.attachments
-      )
-      if post.valid?
-        post.save
+
+      if cloudinary_enabled?
+        post.screenshots = array_of_files
+      else
+        post.update(
+          attachments: array_of_files
+          )
+        if post.valid?
+          post.save
+        end
+      end
       end
     end
-  end
 
   def cloudinary_enabled?
     AppSettings['cloudinary.enabled'] == '1' && AppSettings['cloudinary.cloud_name'].present? && AppSettings['cloudinary.api_key'].present? && AppSettings['cloudinary.api_secret'].present?
